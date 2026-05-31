@@ -1,6 +1,6 @@
-import type { Panel } from '../types/plot';
 import { LAYOUT_TEMPLATES } from '../data/layoutTemplates';
 import { C, fonts } from '../styles/tokens';
+import type { Panel } from '../types/plot';
 
 interface Props {
   layoutId: string;
@@ -12,20 +12,22 @@ interface Props {
 const COLORS = ['#C2785C', '#6BA368', '#5B8DB8', '#D4A03E', '#9B5CA5', '#D4564E'];
 
 export function PageLayoutMap({ layoutId, panels, size = 110, heroId }: Props) {
-  const tpl = LAYOUT_TEMPLATES.find(t => t.id === layoutId);
+  const tpl = LAYOUT_TEMPLATES.find((t) => t.id === layoutId);
   if (!tpl) return null;
   const multi = tpl.panels.length > 1;
   return (
-    <div style={{
-      width: size,
-      height: size * 1.41,
-      position: 'relative',
-      borderRadius: 6,
-      border: `2px solid ${C.cardBorder}`,
-      background: '#fff',
-      overflow: 'hidden',
-      flexShrink: 0,
-    }}>
+    <div
+      style={{
+        width: size,
+        height: size * 1.41,
+        position: 'relative',
+        borderRadius: 6,
+        border: `2px solid ${C.cardBorder}`,
+        background: '#fff',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}
+    >
       {tpl.panels.map((p, i) => {
         const panel = panels[i];
         const color = COLORS[i % COLORS.length];
@@ -49,12 +51,28 @@ export function PageLayoutMap({ layoutId, panels, size = 110, heroId }: Props) {
               gap: 1,
             }}
           >
-            <span style={{ fontSize: 7, fontWeight: 700, color: isHero ? C.hero : color, fontFamily: fonts.mono }}>
+            <span
+              style={{
+                fontSize: 7,
+                fontWeight: 700,
+                color: isHero ? C.hero : color,
+                fontFamily: fonts.mono,
+              }}
+            >
               {i + 1}
             </span>
             {panel && (
               <>
-                <span style={{ fontSize: 7, color: C.text, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span
+                  style={{
+                    fontSize: 7,
+                    color: C.text,
+                    lineHeight: 1.2,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {panel.content}
                 </span>
                 {isHero && multi && (

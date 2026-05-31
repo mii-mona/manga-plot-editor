@@ -1,4 +1,4 @@
-import type { PlotData, Scene, Page, Panel, Line, RefLayout } from '../types/plot';
+import type { Line, Page, Panel, PlotData, RefLayout, Scene } from '../types/plot';
 import { newId } from './ids';
 
 export function migrateData(raw: unknown): PlotData {
@@ -42,7 +42,13 @@ function migratePanel(raw: unknown): Panel {
   // 旧形式: panel.speaker / panel.dialogue → lines[]
   let lines: Line[] = Array.isArray(k.lines) ? (k.lines as Line[]) : [];
   if (lines.length === 0 && typeof k.speaker === 'string' && k.speaker) {
-    lines = [{ id: newId(), speaker: k.speaker, dialogue: typeof k.dialogue === 'string' ? k.dialogue : '' }];
+    lines = [
+      {
+        id: newId(),
+        speaker: k.speaker,
+        dialogue: typeof k.dialogue === 'string' ? k.dialogue : '',
+      },
+    ];
   }
 
   return {

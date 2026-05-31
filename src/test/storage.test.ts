@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach } from 'vitest'
-import { loadFromStorage, saveToStorage, clearStorage } from '../utils/storage'
-import type { PlotData } from '../types/plot'
+import { beforeEach, describe, expect, test } from 'vitest';
+import type { PlotData } from '../types/plot';
+import { clearStorage, loadFromStorage, saveToStorage } from '../utils/storage';
 
 const SAMPLE: PlotData = {
   workTitle: 'テスト作品',
@@ -10,37 +10,37 @@ const SAMPLE: PlotData = {
   refLayouts: [],
   nextId: 100,
   _format: 'manga-plot-editor-v2',
-}
+};
 
 describe('storage', () => {
   beforeEach(() => {
-    localStorage.clear()
-  })
+    localStorage.clear();
+  });
 
   test('データがない場合 null を返す', () => {
-    expect(loadFromStorage()).toBeNull()
-  })
+    expect(loadFromStorage()).toBeNull();
+  });
 
   test('saveToStorage → loadFromStorage で同じデータが復元される', () => {
-    saveToStorage(SAMPLE)
-    const loaded = loadFromStorage()
-    expect(loaded?.workTitle).toBe('テスト作品')
-    expect(loaded?.characters).toEqual(['キャラA'])
-    expect(loaded?.scenes).toEqual([])
-  })
+    saveToStorage(SAMPLE);
+    const loaded = loadFromStorage();
+    expect(loaded?.workTitle).toBe('テスト作品');
+    expect(loaded?.characters).toEqual(['キャラA']);
+    expect(loaded?.scenes).toEqual([]);
+  });
 
   test('clearStorage 後は null を返す', () => {
-    saveToStorage(SAMPLE)
-    clearStorage()
-    expect(loadFromStorage()).toBeNull()
-  })
+    saveToStorage(SAMPLE);
+    clearStorage();
+    expect(loadFromStorage()).toBeNull();
+  });
 
   test('壊れた JSON の場合 null を返す（クラッシュしない）', () => {
-    localStorage.setItem('manga-plot-editor-v2', '{invalid json}')
-    expect(loadFromStorage()).toBeNull()
-  })
+    localStorage.setItem('manga-plot-editor-v2', '{invalid json}');
+    expect(loadFromStorage()).toBeNull();
+  });
 
   test('saveToStorage は true を返す（成功）', () => {
-    expect(saveToStorage(SAMPLE)).toBe(true)
-  })
-})
+    expect(saveToStorage(SAMPLE)).toBe(true);
+  });
+});

@@ -8,13 +8,17 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

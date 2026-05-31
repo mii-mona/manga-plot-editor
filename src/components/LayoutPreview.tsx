@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function LayoutPreview({ layoutId, size = 48, active = false, onClick }: Props) {
-  const tpl = LAYOUT_TEMPLATES.find(t => t.id === layoutId);
+  const tpl = LAYOUT_TEMPLATES.find((t) => t.id === layoutId);
   if (!tpl) return null;
   return (
     <div
