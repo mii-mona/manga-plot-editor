@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+private-data/*.local.json
+private-data/tmp/

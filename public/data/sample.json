@@ -1,0 +1,17 @@
+{
+  "workTitle": "無題の作品",
+  "workTheme": "",
+  "scenes": [
+    {
+      "id": "sample-scene-1",
+      "title": "場面1",
+      "plot": "",
+      "convey": "",
+      "pages": []
+    }
+  ],
+  "characters": [],
+  "refLayouts": [],
+  "nextId": 100,
+  "_format": "manga-plot-editor-v2"
+}
