@@ -1,0 +1,11 @@
+packages:
+  - '.'
+
+minimumReleaseAge: 2880
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  tldts: '7.4.0'
+  tldts-core: '7.4.0'
