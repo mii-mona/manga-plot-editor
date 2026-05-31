@@ -7,8 +7,10 @@ export function migrateData(raw: unknown): PlotData {
     workTitle: typeof d.workTitle === 'string' ? d.workTitle : '無題の作品',
     workTheme: typeof d.workTheme === 'string' ? d.workTheme : '',
     scenes: Array.isArray(d.scenes) ? d.scenes.map(migrateScene) : [],
-    characters: Array.isArray(d.characters) ? (d.characters as string[]) : [],
-    refLayouts: Array.isArray(d.refLayouts) ? (d.refLayouts as RefLayout[]) : [],
+    characters: Array.isArray(d.characters)
+      ? d.characters.filter((c): c is string => typeof c === 'string')
+      : [],
+    refLayouts: Array.isArray(d.refLayouts) ? d.refLayouts.map(migrateRefLayout) : [],
     nextId: typeof d.nextId === 'number' ? d.nextId : 100,
     _format: 'manga-plot-editor-v2',
   };
@@ -40,7 +42,7 @@ function migratePanel(raw: unknown): Panel {
   const k = raw as Record<string, unknown>;
 
   // 旧形式: panel.speaker / panel.dialogue → lines[]
-  let lines: Line[] = Array.isArray(k.lines) ? (k.lines as Line[]) : [];
+  let lines: Line[] = Array.isArray(k.lines) ? k.lines.map(migrateLine) : [];
   if (lines.length === 0 && typeof k.speaker === 'string' && k.speaker) {
     lines = [
       {
@@ -56,5 +58,24 @@ function migratePanel(raw: unknown): Panel {
     content: typeof k.content === 'string' ? k.content : '',
     emotion: typeof k.emotion === 'string' ? k.emotion : '',
     lines,
+  };
+}
+
+function migrateLine(raw: unknown): Line {
+  const l = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof l.id === 'string' ? l.id : newId(),
+    speaker: typeof l.speaker === 'string' ? l.speaker : '',
+    dialogue: typeof l.dialogue === 'string' ? l.dialogue : '',
+  };
+}
+
+function migrateRefLayout(raw: unknown): RefLayout {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof r.id === 'string' ? r.id : newId(),
+    name: typeof r.name === 'string' ? r.name : '無題の参考',
+    layoutId: typeof r.layoutId === 'string' ? r.layoutId : 'h3',
+    note: typeof r.note === 'string' ? r.note : '',
   };
 }

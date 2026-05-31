@@ -76,13 +76,14 @@ export default function App() {
     };
     if (stored) {
       load(migrateData(stored));
+      setLoaded(true);
     } else {
       fetch(SAMPLE_JSON)
         .then((r) => r.json())
         .then((json: unknown) => load(migrateData(json)))
-        .catch(() => load(migrateData({})));
+        .catch(() => load(migrateData({})))
+        .finally(() => setLoaded(true));
     }
-    setLoaded(true);
   }, []);
 
   if (!loaded) {
@@ -183,7 +184,9 @@ export default function App() {
             let panels = [...pg.panels];
             while (panels.length < tpl.count) panels.push(mkPanel());
             if (panels.length > tpl.count) panels = panels.slice(0, tpl.count);
-            return { ...pg, layoutId: lid, panels };
+            const remainingIds = new Set(panels.map((k) => k.id));
+            const heroId = pg.heroId && remainingIds.has(pg.heroId) ? pg.heroId : null;
+            return { ...pg, layoutId: lid, panels, heroId };
           }),
         };
       })
@@ -225,7 +228,13 @@ export default function App() {
           ? {
               ...s,
               pages: s.pages.map((pg) =>
-                pg.id === pid ? { ...pg, panels: pg.panels.filter((k) => k.id !== kid) } : pg
+                pg.id === pid
+                  ? {
+                      ...pg,
+                      panels: pg.panels.filter((k) => k.id !== kid),
+                      heroId: pg.heroId === kid ? null : pg.heroId,
+                    }
+                  : pg
               ),
             }
           : s
