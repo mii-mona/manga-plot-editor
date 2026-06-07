@@ -1,14 +1,24 @@
+import type { ChangeEvent } from 'react';
 import { C, fonts } from '../styles/tokens';
 
 interface Props {
   text: string;
   onChangeText: (v: string) => void;
   onImport: () => void;
+  onImportFile: (file: File) => void;
   onClose: () => void;
+  error?: string | null;
 }
 
-export function ImportModal({ text, onChangeText, onImport, onClose }: Props) {
+export function ImportModal({ text, onChangeText, onImport, onImportFile, onClose, error }: Props) {
   const canImport = text.trim().length > 0;
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // 同じファイルを連続で選べるよう value をリセット。
+    e.target.value = '';
+    if (file) onImportFile(file);
+  };
 
   return (
     <>
@@ -62,8 +72,49 @@ export function ImportModal({ text, onChangeText, onImport, onClose }: Props) {
           </button>
         </div>
         <p style={{ fontSize: 11, color: C.textSub, marginBottom: 8, lineHeight: 1.5 }}>
-          保存しておいたテキストを貼り付けてください。
+          バックアップした JSON ファイルを読み込むか、テキストを貼り付けて復元します。
         </p>
+
+        {/* 手段1: ファイルから読込 */}
+        <label
+          style={{
+            display: 'block',
+            border: `1.5px dashed ${C.cardBorder}`,
+            borderRadius: 10,
+            padding: '12px',
+            textAlign: 'center',
+            fontSize: 13,
+            fontWeight: 600,
+            color: C.accentDark,
+            cursor: 'pointer',
+            background: C.pageBg,
+            marginBottom: 12,
+          }}
+        >
+          📂 JSONファイルから読み込み
+          <input
+            type="file"
+            accept="application/json,.json"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+        </label>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            margin: '4px 0 10px',
+            color: C.textSub,
+            fontSize: 11,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: C.cardBorder }} />
+          または貼り付け
+          <div style={{ flex: 1, height: 1, background: C.cardBorder }} />
+        </div>
+
         <textarea
           value={text}
           onChange={(e) => onChangeText(e.target.value)}
@@ -84,6 +135,22 @@ export function ImportModal({ text, onChangeText, onImport, onClose }: Props) {
             boxSizing: 'border-box',
           }}
         />
+        {error && (
+          <p
+            style={{
+              marginTop: 10,
+              padding: '8px 10px',
+              borderRadius: 8,
+              background: '#FCEDEB',
+              border: `1px solid ${C.danger}`,
+              color: C.danger,
+              fontSize: 11,
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </p>
+        )}
         <button
           type="button"
           onClick={onImport}

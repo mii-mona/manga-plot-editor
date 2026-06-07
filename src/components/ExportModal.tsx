@@ -4,10 +4,11 @@ interface Props {
   data: string;
   copyOk: boolean;
   onCopy: () => void;
+  onDownload: () => void;
   onClose: () => void;
 }
 
-export function ExportModal({ data, copyOk, onCopy, onClose }: Props) {
+export function ExportModal({ data, copyOk, onCopy, onDownload, onClose }: Props) {
   return (
     <>
       <div
@@ -60,7 +61,7 @@ export function ExportModal({ data, copyOk, onCopy, onClose }: Props) {
           </button>
         </div>
         <p style={{ fontSize: 11, color: C.textSub, marginBottom: 8, lineHeight: 1.5 }}>
-          全選択→コピーしてメモアプリに貼り付けて保存。
+          「ファイルに保存」で JSON を端末に書き出せます（推奨）。コピーして貼り付け保存も可能です。
         </p>
         <textarea
           id="export-ta"
@@ -84,25 +85,45 @@ export function ExportModal({ data, copyOk, onCopy, onClose }: Props) {
             boxSizing: 'border-box',
           }}
         />
-        <button
-          type="button"
-          onClick={onCopy}
-          style={{
-            marginTop: 10,
-            padding: '10px 0',
-            borderRadius: 10,
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: fonts.body,
-            fontSize: 14,
-            fontWeight: 600,
-            background: copyOk ? C.success : C.accent,
-            color: '#fff',
-            transition: 'background .2s',
-          }}
-        >
-          {copyOk ? '✓ コピーしました！' : '全文をコピー'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={onDownload}
+            style={{
+              flex: 1,
+              padding: '10px 0',
+              borderRadius: 10,
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: fonts.body,
+              fontSize: 14,
+              fontWeight: 600,
+              background: C.accent,
+              color: '#fff',
+            }}
+          >
+            💾 ファイルに保存
+          </button>
+          <button
+            type="button"
+            onClick={onCopy}
+            style={{
+              flex: 1,
+              padding: '10px 0',
+              borderRadius: 10,
+              border: `1.5px solid ${copyOk ? C.success : C.cardBorder}`,
+              cursor: 'pointer',
+              fontFamily: fonts.body,
+              fontSize: 14,
+              fontWeight: 600,
+              background: copyOk ? C.success : 'transparent',
+              color: copyOk ? '#fff' : C.textSub,
+              transition: 'background .2s',
+            }}
+          >
+            {copyOk ? '✓ コピーしました！' : '全文をコピー'}
+          </button>
+        </div>
       </div>
     </>
   );
