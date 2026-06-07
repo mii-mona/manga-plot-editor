@@ -12,9 +12,21 @@ import type { Doc } from './hooks/useHistory';
 import { useHistory } from './hooks/useHistory';
 import { C, fonts } from './styles/tokens';
 import type { Page, Panel, PlotData } from './types/plot';
+import { backupFilename, downloadJson, readJsonFile } from './utils/backup';
 import { newId } from './utils/ids';
 import { migrateData } from './utils/migrate';
-import { loadFromStorage } from './utils/storage';
+import { ensurePersistentStorage } from './utils/persistence';
+import {
+  dismissPreimport,
+  getLastEditedAt,
+  getLastManualBackupAt,
+  getPreimportAt,
+  hasPendingPreimport,
+  loadFromStorage,
+  readPreimportBackup,
+  savePreimportBackup,
+  setLastManualBackupAt,
+} from './utils/storage';
 
 const SAMPLE_JSON = './data/sample.json';
 
@@ -63,7 +75,15 @@ export default function App() {
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
   const [copyOk, setCopyOk] = useState(false);
+  // データ消失対策（docs/design/data-loss-protection.md）
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
+  // 軽量F: 「インポート前に戻す」導線。リロードしても退避が残っていれば復活させる。
+  const [showRestore, setShowRestore] = useState(false);
+  // 退避日時（ISO）。直近 import 直後は null（「インポートしました」表示）、
+  // リロード復活時は日時付きで「前回インポート前のデータ」と明示する。
+  const [restoreAt, setRestoreAt] = useState<string | null>(null);
 
   const plotData = useMemo<PlotData>(
     () => ({
@@ -78,7 +98,7 @@ export default function App() {
     [workTitle, workTheme, scenes, characters, refLayouts]
   );
 
-  useAutoSave(plotData, loaded);
+  const saveStatus = useAutoSave(plotData, loaded);
 
   // ── 初期ロード ──
   useEffect(() => {
@@ -94,7 +114,20 @@ export default function App() {
         .catch(() => load(migrateData({})))
         .finally(() => setLoaded(true));
     }
+    // 最終バックアップ日時を読み出して表示に反映。
+    setLastBackupAt(getLastManualBackupAt());
+    // 軽量F: 未消化の退避が残っていれば、リロード後も復元導線を復活させる（§6 安全網）。
+    if (hasPendingPreimport()) {
+      setRestoreAt(getPreimportAt());
+      setShowRestore(true);
+    }
   }, [resetBaseline]);
+
+  // ── D: 起動時に一度だけ Persistent Storage を要求（補助・失敗しても無視） ──
+  useEffect(() => {
+    if (!loaded) return;
+    void ensurePersistentStorage();
+  }, [loaded]);
 
   // ── グローバル undo/redo キー操作（モーダル中は無効） ──
   useEffect(() => {
@@ -454,29 +487,108 @@ export default function App() {
 
   // ── エクスポート / インポート ──
   const exportData = JSON.stringify(plotData, null, 2);
+
+  // B: 外部書き出し成功時に最終バックアップ日時を記録（DL / コピー成功時のみ）。
+  const markBackup = () => {
+    setLastManualBackupAt();
+    setLastBackupAt(getLastManualBackupAt());
+  };
+
+  // A: ファイルに保存。DL は完了を観測できないため発火＝記録（§2 / §9 割り切り）。
+  const handleDownload = () => {
+    downloadJson(exportData, backupFilename(workTitle));
+    markBackup();
+  };
+
+  // コピー成功時のみ lastManualBackupAt を更新（§3 指摘#3）。失敗時は更新せず通知。
   const handleCopy = async () => {
+    let ok = false;
     try {
       await navigator.clipboard.writeText(exportData);
+      ok = true;
     } catch {
       const ta = document.getElementById('export-ta') as HTMLTextAreaElement | null;
       if (ta) {
         ta.select();
-        document.execCommand('copy');
+        ok = document.execCommand('copy') === true;
       }
     }
-    setCopyOk(true);
-    setTimeout(() => setCopyOk(false), 2000);
-  };
-  const handleImport = () => {
-    try {
-      const d = migrateData(JSON.parse(importText));
-      resetBaseline(toDoc(d));
-      setShowImport(false);
-      setImportText('');
-    } catch {
-      alert('JSONの形式が正しくありません。');
+    if (ok) {
+      markBackup();
+      setCopyOk(true);
+      setTimeout(() => setCopyOk(false), 2000);
+    } else {
+      alert('コピーに失敗しました。「ファイルに保存」をお試しください。');
     }
   };
+
+  // 軽量F: paste / file 共通の import 経路（§6）。
+  //   1. JSON.parse  2. migrateData  3. 退避(失敗時中断)  4. resetBaseline
+  const runImport = (rawText: string): boolean => {
+    let migrated: PlotData;
+    try {
+      migrated = migrateData(JSON.parse(rawText));
+    } catch {
+      // 不正 JSON: preimport も doc も変更しない（早期 return）。
+      setImportError('JSONの形式が正しくありません。');
+      return false;
+    }
+    // 退避は parse+migrate 成功後・resetBaseline 直前。成功 import のみ preimport を更新。
+    if (!savePreimportBackup(plotData)) {
+      setImportError(
+        'インポート前の退避に失敗したため、復元を中止しました。先にファイルバックアップ（書き出し）してください。'
+      );
+      return false;
+    }
+    resetBaseline(toDoc(migrated));
+    setShowImport(false);
+    setImportText('');
+    setImportError(null);
+    setRestoreAt(null); // 直近 import なので日時ラベル無し（「インポートしました」）
+    setShowRestore(true);
+    return true;
+  };
+
+  const handleImport = () => {
+    runImport(importText);
+  };
+
+  const handleImportFile = (file: File) => {
+    setImportError(null);
+    readJsonFile(file)
+      .then((text) => runImport(text))
+      .catch(() => setImportError('ファイルの読み込みに失敗しました。'));
+  };
+
+  // 軽量F: 「インポート前に戻す」。退避した1世代を読み出して復元。
+  const handleRestorePreimport = () => {
+    const prev = readPreimportBackup();
+    if (prev) {
+      resetBaseline(toDoc(migrateData(prev)));
+    }
+    // 復元したらこの退避は消化済み（リロードしても再表示しない）。退避データ自体は残す。
+    dismissPreimport();
+    setShowRestore(false);
+  };
+
+  // 復元導線を閉じる（却下）。リロード後の再表示も抑止する。
+  const handleDismissRestore = () => {
+    dismissPreimport();
+    setShowRestore(false);
+  };
+
+  // B: リマインド判定。lastEditedAt > lastManualBackupAt かつ 前回から7日以上経過。
+  //    未バックアップ時はバナーを出さず、サイドバーのテキスト案内に留める。
+  const backupReminder = (() => {
+    if (!lastBackupAt) return false;
+    const editedAt = getLastEditedAt();
+    if (!editedAt) return false;
+    const edited = new Date(editedAt).getTime();
+    const backed = new Date(lastBackupAt).getTime();
+    if (Number.isNaN(edited) || Number.isNaN(backed)) return false;
+    if (edited <= backed) return false;
+    return Date.now() - backed >= 7 * 86_400_000;
+  })();
 
   // ── 削除確認 ──
   const doConfirm = () => {
@@ -545,17 +657,24 @@ export default function App() {
           data={exportData}
           copyOk={copyOk}
           onCopy={handleCopy}
+          onDownload={handleDownload}
           onClose={() => setShowExport(false)}
         />
       )}
       {showImport && (
         <ImportModal
           text={importText}
-          onChangeText={setImportText}
+          onChangeText={(v) => {
+            setImportText(v);
+            setImportError(null);
+          }}
           onImport={handleImport}
+          onImportFile={handleImportFile}
+          error={importError}
           onClose={() => {
             setShowImport(false);
             setImportText('');
+            setImportError(null);
           }}
         />
       )}
@@ -632,6 +751,101 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* ── C: 自動保存失敗バナー（永続） ── */}
+      {saveStatus === 'error' && (
+        <div
+          style={{
+            background: '#FCEDEB',
+            borderBottom: `1px solid ${C.danger}`,
+            color: C.danger,
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            ⚠️ 自動保存に失敗しました（容量超過の可能性）。今すぐバックアップを書き出してください。
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowExport(true)}
+            style={{
+              background: C.danger,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: fonts.body,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            書き出す
+          </button>
+        </div>
+      )}
+
+      {/* ── 軽量F: インポート後の「インポート前に戻す」導線（一時バナー） ── */}
+      {showRestore && (
+        <div
+          style={{
+            background: C.heroBg,
+            borderBottom: `1px solid ${C.heroBorder}`,
+            color: C.accentDark,
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            {restoreAt
+              ? `前回インポート前のデータが残っています（${restoreAt.slice(0, 10)}）。`
+              : 'インポートしました。'}
+          </span>
+          <button
+            type="button"
+            onClick={handleRestorePreimport}
+            style={{
+              background: 'none',
+              color: C.accentDark,
+              border: `1.5px solid ${C.heroBorder}`,
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: fonts.body,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ↺ インポート前に戻す
+          </button>
+          <button
+            type="button"
+            onClick={handleDismissRestore}
+            aria-label="閉じる"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.textSub,
+              fontSize: 16,
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── メインレイアウト ── */}
       <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
@@ -733,6 +947,8 @@ export default function App() {
           onRemoveChar={removeChar}
           onShowExport={() => setShowExport(true)}
           onShowImport={() => setShowImport(true)}
+          lastBackupAt={lastBackupAt}
+          backupReminder={backupReminder}
           refLayouts={refLayouts}
           onAddRef={addRefLayout}
           onUpdateRef={updateRefLayout}

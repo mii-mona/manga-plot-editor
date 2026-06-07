@@ -25,6 +25,10 @@ interface Props {
   onRemoveChar: (name: string) => void;
   onShowExport: () => void;
   onShowImport: () => void;
+  /** 最終バックアップ日時（ISO 文字列）。未実施なら null。 */
+  lastBackupAt: string | null;
+  /** リマインド条件成立時に true（最終バックアップ以降に編集 かつ 7日以上経過）。 */
+  backupReminder: boolean;
   refLayouts: RefLayout[];
   onAddRef: () => void;
   onUpdateRef: (id: string, field: 'name' | 'layoutId' | 'note', value: string) => void;
@@ -35,6 +39,19 @@ const TABS: { key: 'info' | 'ref'; label: string }[] = [
   { key: 'info', label: '作品情報' },
   { key: 'ref', label: '参考コマ割り' },
 ];
+
+/** 最終バックアップ日時を「YYYY-MM-DD（N日前）」形式に整形する。未実施なら null。 */
+function formatLastBackup(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  const rel = days <= 0 ? '今日' : `${days}日前`;
+  return `${yyyy}-${mm}-${dd}（${rel}）`;
+}
 
 export function Sidebar(props: Props) {
   const {
@@ -58,6 +75,8 @@ export function Sidebar(props: Props) {
     onRemoveChar,
     onShowExport,
     onShowImport,
+    lastBackupAt,
+    backupReminder,
     refLayouts,
     onAddRef,
     onUpdateRef,
@@ -286,6 +305,28 @@ export function Sidebar(props: Props) {
 
       <div style={{ paddingTop: 14, borderTop: `1px solid ${C.cardBorder}` }}>
         <div style={secT}>データ管理</div>
+        {backupReminder && (
+          <button
+            type="button"
+            onClick={onShowExport}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              border: `1px solid ${C.hero}`,
+              background: C.heroBg,
+              borderRadius: 8,
+              padding: '8px 10px',
+              marginBottom: 8,
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: C.accentDark,
+              cursor: 'pointer',
+              fontFamily: fonts.body,
+            }}
+          >
+            ⏰ しばらくバックアップしていません。書き出しをおすすめします。
+          </button>
+        )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <button
             type="button"
@@ -310,8 +351,13 @@ export function Sidebar(props: Props) {
             📂 データを復元
           </button>
         </div>
+        <p style={{ fontSize: 10, color: C.textSub, lineHeight: 1.5, marginBottom: 4 }}>
+          「ファイルに保存」で JSON を書き出して保管してください。
+        </p>
         <p style={{ fontSize: 10, color: C.textSub, lineHeight: 1.5 }}>
-          コピーしてメモ帳等に貼り付けて保存。
+          {formatLastBackup(lastBackupAt)
+            ? `最終バックアップ: ${formatLastBackup(lastBackupAt)}`
+            : 'まだバックアップしていません'}
         </p>
       </div>
     </>
