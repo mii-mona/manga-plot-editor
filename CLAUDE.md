@@ -1,29 +1,35 @@
 # manga-plot-editor — Claude Code 作業ガイド
 
-## private-data/ ルール（厳守）
+## 本番創作データの管理（厳守）
 
-`private-data/` はプロジェクトルートにある**本番創作データの置き場**。
-private repo にコミットし、git でバージョン管理する。
-GitHub Pages の build 成果物には含めない。
+本番の創作データは**この公開リポジトリには一切置かない**。
+別の **private repo `manga-project-data`** で git 管理する。
+
+```
+manga-project-data/   (private repo)
+  project-a/
+    latest.json
+    backups/
+      2026-06-07.json
+  project-b/
+    latest.json
+```
 
 ### 絶対にやってはいけないこと
 
-- `src/` から `private-data/` を import しない
-- `public/` に `private-data/` 内ファイルをコピーしない
-- `fetch('/private-data/...')` をコードに書かない
+- 本番データ JSON をこのリポジトリにコミットしない
+- `src/` から本番データを import しない
+- `public/` に本番データをコピーしない
+- `fetch` で本番データを読むコードを書かない
 - build script や GitHub Actions で `dist/` に含める設定をしない
 
 ### 正しい設計
 
-公開アプリが使う初期データは `public/data/sample.json` のみ。
-本番データはユーザーが「バックアップを読み込む」から手動でブラウザに取り込む。
+公開アプリが使う初期データは `public/data/sample.json`（空テンプレート）のみ。
+本番データはユーザーが `manga-project-data` から手元の JSON を取り出し、
+アプリの「バックアップを読み込む」から手動でブラウザに取り込む。
 一度読み込むと localStorage に保存され、以後は自動で復元される。
-
-### .gitignore ルール
-
-- `private-data/*.local.json` → 除外（一時ファイル）
-- `private-data/tmp/` → 除外
-- `private-data/*.json` → **除外しない**（バージョン管理対象）
+編集後は「バックアップを書き出す」で JSON を取得し、`manga-project-data` に手動でコミットする。
 
 ---
 
