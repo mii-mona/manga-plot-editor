@@ -47,7 +47,10 @@ manga-plot-editor/
       useAutoSave.ts     ← 600ms debounce 自動保存
     components/          ← UI コンポーネント群
     test/                ← Vitest テスト
-  docs/spec.md           ← 仕様書（UX判断・将来構想）
+  docs/
+    spec.md              ← 仕様書（全機能・UX判断・将来構想の正本）
+    roadmap.md           ← v2 実行計画（優先度付き）
+    archive/             ← 移行前のプロトタイプ・旧デザイン案（履歴）
   CLAUDE.md              ← AI作業ガイド（本番データ管理ルール等）
 ```
 
