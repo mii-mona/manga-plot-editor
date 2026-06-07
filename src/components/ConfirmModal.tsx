@@ -11,7 +11,7 @@ interface Props {
 
 export function ConfirmModal({
   title,
-  message = 'この操作は元に戻せません。',
+  message,
   confirmLabel = '削除する',
   danger = true,
   onConfirm,
@@ -51,9 +51,11 @@ export function ConfirmModal({
         >
           「{title}」を削除しますか？
         </div>
-        <p style={{ fontSize: 12, color: C.textSub, marginBottom: 20, lineHeight: 1.5 }}>
-          {message}
-        </p>
+        {message && (
+          <p style={{ fontSize: 12, color: C.textSub, marginBottom: 20, lineHeight: 1.5 }}>
+            {message}
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
