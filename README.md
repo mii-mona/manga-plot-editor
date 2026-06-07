@@ -31,7 +31,6 @@ pnpm test:ui     # テスト UI（ブラウザ）
 
 ```
 manga-plot-editor/
-  private-data/          ← 本番創作データ（アプリからは参照しない）
   public/
     data/
       sample.json        ← デモ用初期データ（公開OK）
@@ -49,7 +48,7 @@ manga-plot-editor/
     components/          ← UI コンポーネント群
     test/                ← Vitest テスト
   docs/spec.md           ← 仕様書（UX判断・将来構想）
-  CLAUDE.md              ← AI作業ガイド（private-data ルール等）
+  CLAUDE.md              ← AI作業ガイド（本番データ管理ルール等）
 ```
 
 ## データ管理方針
@@ -57,7 +56,7 @@ manga-plot-editor/
 - 全データは `localStorage` に自動保存される（600ms debounce）
 - エクスポート: JSON をコピーしてメモアプリ等に保存
 - インポート: 保存した JSON を貼り付けて復元
-- 自分用の本番データは `private-data/` に置き、アプリ起動時に「バックアップを読み込む」で手動ロードする
+- 自分用の本番データは別の private repo `manga-project-data` で管理し、アプリ起動時に「バックアップを読み込む」で手動ロードする（この公開リポジトリには置かない）
 
 **将来 DB に移行する場合:**
 全要素（scene / page / panel / line）が UUID string ID を持つため、そのまま DB の主キーとして使用できる。まず `works` テーブルに `data_json` 全体を保存し、必要に応じて正規化する想定。
