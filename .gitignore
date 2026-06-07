@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.local
 package-lock.json
+
+# ローカル AI ツール設定（非公開）
+.claude/
+.codex/
