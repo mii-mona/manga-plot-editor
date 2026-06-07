@@ -8,29 +8,45 @@ import { SceneCard } from './components/SceneCard';
 import { Sidebar } from './components/Sidebar';
 import { LAYOUT_TEMPLATES } from './data/layoutTemplates';
 import { useAutoSave } from './hooks/useAutoSave';
+import type { Doc } from './hooks/useHistory';
+import { useHistory } from './hooks/useHistory';
 import { C, fonts } from './styles/tokens';
-import type { Page, Panel, PlotData, Scene } from './types/plot';
+import type { Page, Panel, PlotData } from './types/plot';
 import { newId } from './utils/ids';
 import { migrateData } from './utils/migrate';
-import { clearStorage, loadFromStorage } from './utils/storage';
+import { loadFromStorage } from './utils/storage';
 
 const SAMPLE_JSON = './data/sample.json';
 
-type ConfirmState =
-  | { type: 'scene'; sceneId: string; title: string }
-  | { type: 'reset'; title: string };
+const EMPTY_DOC: Doc = {
+  workTitle: '無題の作品',
+  workTheme: '',
+  scenes: [],
+  characters: [],
+  refLayouts: [],
+};
+
+type ConfirmState = { type: 'scene'; sceneId: string; title: string };
 
 function mkPanel(): Panel {
   return { id: newId(), content: '', emotion: '', lines: [] };
 }
 
+/** PlotData（永続形式）から履歴対象の Doc 5項目を取り出す。 */
+function toDoc(d: PlotData): Doc {
+  return {
+    workTitle: d.workTitle,
+    workTheme: d.workTheme,
+    scenes: d.scenes,
+    characters: d.characters,
+    refLayouts: d.refLayouts,
+  };
+}
+
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [scenes, setScenes] = useState<Scene[]>([]);
-  const [characters, setCharacters] = useState<string[]>([]);
-  const [workTitle, setWorkTitle] = useState('無題の作品');
-  const [workTheme, setWorkTheme] = useState('');
-  const [refLayouts, setRefLayouts] = useState<PlotData['refLayouts']>([]);
+  const { doc, update, undo, redo, canUndo, canRedo, resetBaseline } = useHistory(EMPTY_DOC);
+  const { scenes, characters, workTitle, workTheme, refLayouts } = doc;
 
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
@@ -67,13 +83,7 @@ export default function App() {
   // ── 初期ロード ──
   useEffect(() => {
     const stored = loadFromStorage();
-    const load = (d: PlotData) => {
-      setScenes(d.scenes);
-      setCharacters(d.characters);
-      setWorkTitle(d.workTitle);
-      setWorkTheme(d.workTheme);
-      setRefLayouts(d.refLayouts);
-    };
+    const load = (d: PlotData) => resetBaseline(toDoc(d));
     if (stored) {
       load(migrateData(stored));
       setLoaded(true);
@@ -84,7 +94,26 @@ export default function App() {
         .catch(() => load(migrateData({})))
         .finally(() => setLoaded(true));
     }
-  }, []);
+  }, [resetBaseline]);
+
+  // ── グローバル undo/redo キー操作（モーダル中は無効） ──
+  useEffect(() => {
+    const modalOpen = !!layoutPicker || !!confirmState || showExport || showImport;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (modalOpen) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [layoutPicker, confirmState, showExport, showImport, undo, redo]);
 
   if (!loaded) {
     return (
@@ -131,10 +160,16 @@ export default function App() {
       return n;
     });
   const updateScene = (id: string, field: 'title' | 'plot' | 'convey', value: string) =>
-    setScenes((p) => p.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+    update(
+      (d) => ({ ...d, scenes: d.scenes.map((s) => (s.id === id ? { ...s, [field]: value } : s)) }),
+      { transient: true, scope: `scene:${id}:${field}` }
+    );
   const addScene = () => {
     const id = newId();
-    setScenes((p) => [...p, { id, title: '新しい場面', plot: '', convey: '', pages: [] }]);
+    update((d) => ({
+      ...d,
+      scenes: [...d.scenes, { id, title: '新しい場面', plot: '', convey: '', pages: [] }],
+    }));
     setExpandedScenes((p) => new Set(p).add(id));
   };
   const removeScene = (id: string) => {
@@ -144,8 +179,9 @@ export default function App() {
 
   // ── ページ操作 ──
   const addPage = (sid: string) =>
-    setScenes((p) =>
-      p.map((s) => {
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) => {
         if (s.id !== sid) return s;
         const panel = mkPanel();
         const page: Page = {
@@ -156,11 +192,12 @@ export default function App() {
           panels: [panel],
         };
         return { ...s, pages: [...s.pages, page] };
-      })
-    );
+      }),
+    }));
   const removePage = (sid: string, pid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -169,13 +206,14 @@ export default function App() {
                 .map((pg, i) => ({ ...pg, label: `${i + 1}P` })),
             }
           : s
-      )
-    );
+      ),
+    }));
   const setPageLayout = (sid: string, pid: string, lid: string) => {
     const tpl = LAYOUT_TEMPLATES.find((t) => t.id === lid);
     if (!tpl) return;
-    setScenes((p) =>
-      p.map((s) => {
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) => {
         if (s.id !== sid) return s;
         return {
           ...s,
@@ -189,15 +227,16 @@ export default function App() {
             return { ...pg, layoutId: lid, panels, heroId };
           }),
         };
-      })
-    );
+      }),
+    }));
     setLayoutPicker(null);
   };
 
   // ── コマ操作 ──
   const setHeroPanel = (sid: string, pid: string, kid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -206,11 +245,12 @@ export default function App() {
               ),
             }
           : s
-      )
-    );
+      ),
+    }));
   const addPanel = (sid: string, pid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -219,11 +259,12 @@ export default function App() {
               ),
             }
           : s
-      )
-    );
+      ),
+    }));
   const removePanel = (sid: string, pid: string, kid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -238,8 +279,8 @@ export default function App() {
               ),
             }
           : s
-      )
-    );
+      ),
+    }));
   const updatePanel = (
     sid: string,
     pid: string,
@@ -247,28 +288,33 @@ export default function App() {
     field: 'content' | 'emotion',
     value: string
   ) =>
-    setScenes((p) =>
-      p.map((s) =>
-        s.id === sid
-          ? {
-              ...s,
-              pages: s.pages.map((pg) =>
-                pg.id === pid
-                  ? {
-                      ...pg,
-                      panels: pg.panels.map((k) => (k.id === kid ? { ...k, [field]: value } : k)),
-                    }
-                  : pg
-              ),
-            }
-          : s
-      )
+    update(
+      (d) => ({
+        ...d,
+        scenes: d.scenes.map((s) =>
+          s.id === sid
+            ? {
+                ...s,
+                pages: s.pages.map((pg) =>
+                  pg.id === pid
+                    ? {
+                        ...pg,
+                        panels: pg.panels.map((k) => (k.id === kid ? { ...k, [field]: value } : k)),
+                      }
+                    : pg
+                ),
+              }
+            : s
+        ),
+      }),
+      { transient: true, scope: `panel:${kid}:${field}` }
     );
 
   // ── セリフ操作 ──
   const addLine = (sid: string, pid: string, kid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -289,11 +335,12 @@ export default function App() {
               ),
             }
           : s
-      )
-    );
+      ),
+    }));
   const removeLine = (sid: string, pid: string, kid: string, lid: string) =>
-    setScenes((p) =>
-      p.map((s) =>
+    update((d) => ({
+      ...d,
+      scenes: d.scenes.map((s) =>
         s.id === sid
           ? {
               ...s,
@@ -309,8 +356,8 @@ export default function App() {
               ),
             }
           : s
-      )
-    );
+      ),
+    }));
   const updateLine = (
     sid: string,
     pid: string,
@@ -319,31 +366,35 @@ export default function App() {
     field: 'speaker' | 'dialogue',
     value: string
   ) =>
-    setScenes((p) =>
-      p.map((s) =>
-        s.id === sid
-          ? {
-              ...s,
-              pages: s.pages.map((pg) =>
-                pg.id === pid
-                  ? {
-                      ...pg,
-                      panels: pg.panels.map((k) =>
-                        k.id === kid
-                          ? {
-                              ...k,
-                              lines: k.lines.map((ln) =>
-                                ln.id === lid ? { ...ln, [field]: value } : ln
-                              ),
-                            }
-                          : k
-                      ),
-                    }
-                  : pg
-              ),
-            }
-          : s
-      )
+    update(
+      (d) => ({
+        ...d,
+        scenes: d.scenes.map((s) =>
+          s.id === sid
+            ? {
+                ...s,
+                pages: s.pages.map((pg) =>
+                  pg.id === pid
+                    ? {
+                        ...pg,
+                        panels: pg.panels.map((k) =>
+                          k.id === kid
+                            ? {
+                                ...k,
+                                lines: k.lines.map((ln) =>
+                                  ln.id === lid ? { ...ln, [field]: value } : ln
+                                ),
+                              }
+                            : k
+                        ),
+                      }
+                    : pg
+                ),
+              }
+            : s
+        ),
+      }),
+      { transient: true, scope: `line:${lid}:${field}` }
     );
 
   // ── ドラッグ並べ替え ──
@@ -354,13 +405,13 @@ export default function App() {
   };
   const onDragEnd = () => {
     if (dragId != null && dragOverId != null && dragId !== dragOverId) {
-      setScenes((p) => {
-        const a = [...p];
+      update((d) => {
+        const a = [...d.scenes];
         const from = a.findIndex((x) => x.id === dragId);
         const to = a.findIndex((x) => x.id === dragOverId);
         const [moved] = a.splice(from, 1);
         a.splice(to, 0, moved);
-        return a;
+        return { ...d, scenes: a };
       });
     }
     setDragId(null);
@@ -370,17 +421,36 @@ export default function App() {
   // ── 登場人物 ──
   const addChar = () => {
     const name = newChar.trim();
-    if (name && !characters.includes(name)) setCharacters((p) => [...p, name]);
+    if (name && !characters.includes(name))
+      update((d) => ({ ...d, characters: [...d.characters, name] }));
     setNewChar('');
   };
-  const removeChar = (name: string) => setCharacters((p) => p.filter((c) => c !== name));
+  const removeChar = (name: string) =>
+    update((d) => ({ ...d, characters: d.characters.filter((c) => c !== name) }));
 
   // ── 参考コマ割り ──
   const addRefLayout = () =>
-    setRefLayouts((p) => [...p, { id: newId(), name: '新しい参考', layoutId: 'h3', note: '' }]);
+    update((d) => ({
+      ...d,
+      refLayouts: [...d.refLayouts, { id: newId(), name: '新しい参考', layoutId: 'h3', note: '' }],
+    }));
   const updateRefLayout = (id: string, field: 'name' | 'layoutId' | 'note', value: string) =>
-    setRefLayouts((p) => p.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  const removeRefLayout = (id: string) => setRefLayouts((p) => p.filter((r) => r.id !== id));
+    update(
+      (d) => ({
+        ...d,
+        refLayouts: d.refLayouts.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+      }),
+      // layoutId はセレクト操作なので即コミット。name / note は自由入力なので transient。
+      field === 'layoutId' ? undefined : { transient: true, scope: `ref:${id}:${field}` }
+    );
+  const removeRefLayout = (id: string) =>
+    update((d) => ({ ...d, refLayouts: d.refLayouts.filter((r) => r.id !== id) }));
+
+  // ── 作品情報 ──
+  const setWorkTitle = (v: string) =>
+    update((d) => ({ ...d, workTitle: v }), { transient: true, scope: 'work:title' });
+  const setWorkTheme = (v: string) =>
+    update((d) => ({ ...d, workTheme: v }), { transient: true, scope: 'work:theme' });
 
   // ── エクスポート / インポート ──
   const exportData = JSON.stringify(plotData, null, 2);
@@ -400,11 +470,7 @@ export default function App() {
   const handleImport = () => {
     try {
       const d = migrateData(JSON.parse(importText));
-      setScenes(d.scenes);
-      setCharacters(d.characters);
-      setWorkTitle(d.workTitle);
-      setWorkTheme(d.workTheme);
-      setRefLayouts(d.refLayouts);
+      resetBaseline(toDoc(d));
       setShowImport(false);
       setImportText('');
     } catch {
@@ -412,19 +478,10 @@ export default function App() {
     }
   };
 
-  // ── 削除確認 / リセット ──
+  // ── 削除確認 ──
   const doConfirm = () => {
     if (!confirmState) return;
-    if (confirmState.type === 'scene') {
-      setScenes((p) => p.filter((s) => s.id !== confirmState.sceneId));
-    } else {
-      setScenes([]);
-      setCharacters([]);
-      setWorkTitle('無題の作品');
-      setWorkTheme('');
-      setRefLayouts([]);
-      clearStorage();
-    }
+    update((d) => ({ ...d, scenes: d.scenes.filter((s) => s.id !== confirmState.sceneId) }));
     setConfirmState(null);
   };
 
@@ -443,6 +500,18 @@ export default function App() {
     fontSize: 12,
     fontFamily: fonts.mono,
   };
+
+  const historyBtn = (enabled: boolean) => ({
+    background: 'none',
+    border: `1.5px solid ${C.cardBorder}`,
+    borderRadius: 8,
+    padding: '6px 10px',
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    fontSize: 16,
+    color: enabled ? C.textSub : C.cardBorder,
+    lineHeight: 1,
+    opacity: enabled ? 1 : 0.5,
+  });
 
   return (
     <div
@@ -467,11 +536,6 @@ export default function App() {
       {confirmState && (
         <ConfirmModal
           title={confirmState.title}
-          message={
-            confirmState.type === 'reset'
-              ? 'localStorageのデータが削除されます。この操作は元に戻せません。'
-              : 'この操作は元に戻せません。'
-          }
           onConfirm={doConfirm}
           onCancel={() => setConfirmState(null)}
         />
@@ -529,22 +593,44 @@ export default function App() {
             <span style={badge}>{scenes.length}場面</span>
           </div>
         </div>
-        <button
-          type="button"
-          style={{
-            background: 'none',
-            border: `1.5px solid ${C.cardBorder}`,
-            borderRadius: 8,
-            padding: '6px 10px',
-            cursor: 'pointer',
-            fontSize: 16,
-            color: C.textSub,
-            lineHeight: 1,
-          }}
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-        >
-          ☰
-        </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            type="button"
+            style={historyBtn(canUndo)}
+            onClick={undo}
+            disabled={!canUndo}
+            title="元に戻す (Ctrl+Z)"
+            aria-label="元に戻す"
+          >
+            ↩︎
+          </button>
+          <button
+            type="button"
+            style={historyBtn(canRedo)}
+            onClick={redo}
+            disabled={!canRedo}
+            title="やり直す (Ctrl+Shift+Z)"
+            aria-label="やり直す"
+          >
+            ↪︎
+          </button>
+          <button
+            type="button"
+            style={{
+              background: 'none',
+              border: `1.5px solid ${C.cardBorder}`,
+              borderRadius: 8,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: 16,
+              color: C.textSub,
+              lineHeight: 1,
+            }}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            ☰
+          </button>
+        </div>
       </header>
 
       {/* ── メインレイアウト ── */}
@@ -647,7 +733,6 @@ export default function App() {
           onRemoveChar={removeChar}
           onShowExport={() => setShowExport(true)}
           onShowImport={() => setShowImport(true)}
-          onReset={() => setConfirmState({ type: 'reset', title: '全データ' })}
           refLayouts={refLayouts}
           onAddRef={addRefLayout}
           onUpdateRef={updateRefLayout}

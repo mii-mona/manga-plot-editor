@@ -25,7 +25,6 @@ interface Props {
   onRemoveChar: (name: string) => void;
   onShowExport: () => void;
   onShowImport: () => void;
-  onReset: () => void;
   refLayouts: RefLayout[];
   onAddRef: () => void;
   onUpdateRef: (id: string, field: 'name' | 'layoutId' | 'note', value: string) => void;
@@ -59,7 +58,6 @@ export function Sidebar(props: Props) {
     onRemoveChar,
     onShowExport,
     onShowImport,
-    onReset,
     refLayouts,
     onAddRef,
     onUpdateRef,
@@ -312,16 +310,9 @@ export function Sidebar(props: Props) {
             📂 データを復元
           </button>
         </div>
-        <p style={{ fontSize: 10, color: C.textSub, lineHeight: 1.5, marginBottom: 12 }}>
+        <p style={{ fontSize: 10, color: C.textSub, lineHeight: 1.5 }}>
           コピーしてメモ帳等に貼り付けて保存。
         </p>
-        <button
-          type="button"
-          style={{ ...btnS, color: C.danger, borderColor: C.danger, width: '100%', fontSize: 10 }}
-          onClick={onReset}
-        >
-          データをリセット
-        </button>
       </div>
     </>
   );
